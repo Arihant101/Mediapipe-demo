@@ -8,7 +8,7 @@ Live MediaPipe demos that run entirely in your browser. No install, and no video
 | **Face** | Sunglasses, devil horns, crown, mustache or clown nose, plus a mood detector (smile, frown, surprise, blink, wink, mouth open) | `#face-glasses` `#face-horns` `#face-crown` `#face-mustache` `#face-nose` `#face-none` |
 | **Full body** | Erases a person and turns them into an otter, robot, X-ray skeleton, neon light trails or an anime girl | `#body-otter` `#body-robot` `#body-skeleton` `#body-neon` `#body-anime` |
 
-**Live site:** https://crqzyexprees.github.io/mediapipe-demo/
+**Live site:** https://arihant101.github.io/mediapipe-demo/
 
 ## Run it
 
