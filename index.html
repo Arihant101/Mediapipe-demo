@@ -1,0 +1,1124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Body Controller Demos</title>
+<meta name="description" content="Live MediaPipe demos in your browser: finger counter, face filters with a mood detector, and full-body characters (otter, robot, skeleton, neon, anime girl).">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@400..700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  /* Layout: tab bar + one camera stage + option chips + a short explainer per demo. Dark single theme so video reads well. */
+  :root {
+    --bg: #0E1116; --panel: #161B22; --line: #262D38;
+    --fg: #ECE9E2; --muted: #9AA3AE; --accent: #FF8A3D; --accent-ink: #1A1206; --blue: #6CB4FF; --bad: #FF6B6B; --good: #5FD39A;
+    --display: "Rubik", "Segoe UI", Arial, sans-serif;
+    --mono: "JetBrains Mono", Consolas, "Courier New", monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--display); }
+  body { min-height: 100vh; display: flex; flex-direction: column; }
+  a { color: var(--blue); }
+  :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+  header {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px;
+    padding: 14px max(16px, env(safe-area-inset-left, 0px)) 14px max(16px, env(safe-area-inset-right, 0px));
+    border-bottom: 1px solid var(--line);
+  }
+  .brand { display: flex; flex-direction: column; gap: 2px; margin-right: auto; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; color: var(--accent); }
+  h1 { margin: 0; font-size: 22px; font-weight: 700; }
+  .tabs { display: flex; gap: 4px; padding: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+  .tabs button {
+    font: inherit; font-size: 15px; font-weight: 500; cursor: pointer; border: 0; background: transparent;
+    color: var(--muted); padding: 9px 16px; border-radius: 7px; display: flex; gap: 8px; align-items: center;
+  }
+  .tabs button:hover { color: var(--fg); }
+  .tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
+  .tabs .n { font-family: var(--mono); font-size: 12px; opacity: .7; }
+
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .btn { font: inherit; font-size: 14px; cursor: pointer; border: 1px solid var(--line); background: var(--panel); color: var(--fg); padding: 9px 14px; border-radius: 8px; }
+  .btn:hover { border-color: var(--muted); }
+  .btn.primary { background: var(--fg); color: var(--bg); border-color: var(--fg); font-weight: 600; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .toggle { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); }
+  select.btn { max-width: 240px; padding: 8px 10px; }
+
+  main { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 12px;
+    padding: 16px max(16px, env(safe-area-inset-left, 0px)) 28px max(16px, env(safe-area-inset-right, 0px)); }
+
+  .options { width: 100%; max-width: 1400px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .options .label { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-right: 4px; }
+  .chip { font: inherit; font-size: 14px; cursor: pointer; border: 1px solid var(--line); background: var(--panel); color: var(--fg); padding: 7px 14px; border-radius: 999px; }
+  .chip:hover { border-color: var(--muted); }
+  .chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); font-weight: 600; }
+  .options .spacer { flex: 1; }
+  .hint { font-size: 13px; color: var(--muted); }
+  kbd { font-family: var(--mono); font-size: 12px; border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+
+  .stage {
+    --ar: 1.7778; position: relative; width: min(100%, calc((100vh - 270px) * var(--ar))); min-width: min(100%, 320px); aspect-ratio: var(--ar);
+    max-width: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+  }
+  .stage:fullscreen { width: 100vw; height: 100vh; border: 0; border-radius: 0; background: #000; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+  .stage.mirror canvas { transform: scaleX(-1); }
+  .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; padding: 24px; }
+  .overlay strong { font-size: 22px; }
+  .overlay span { color: var(--muted); max-width: 46ch; line-height: 1.5; }
+  #loadingBadge { position: absolute; right: 16px; top: 16px; font-family: var(--mono); font-size: 13px; background: rgba(14,17,22,.82); padding: 8px 12px; border-radius: 8px; color: var(--fg); }
+  #big {
+    position: absolute; left: 16px; top: 16px; font-weight: 700; font-size: clamp(28px, 5.5vw, 76px); line-height: 1;
+    color: var(--accent); font-variant-numeric: tabular-nums; max-width: calc(100% - 32px);
+    background: rgba(14, 17, 22, 0.8); padding: 14px 20px; border-radius: 14px;
+  }
+  #big small { display: block; font-size: 15px; font-weight: 500; color: var(--fg); letter-spacing: .08em; text-transform: uppercase; margin-top: 6px; }
+  #big .bars { display: grid; grid-template-columns: auto 120px auto; gap: 6px 10px; align-items: center; margin-top: 12px; font-size: 13px; font-weight: 500; color: var(--fg); letter-spacing: 0; }
+  #big .bars i { display: block; height: 7px; border-radius: 4px; background: var(--blue); }
+  #big .bars i.on { background: var(--accent); }
+  #big .bars b { font-family: var(--mono); font-weight: 400; color: var(--muted); text-align: right; min-width: 3ch; }
+  #big .track { background: rgba(255,255,255,.12); border-radius: 4px; }
+  #count { font-size: clamp(80px, 18vw, 220px); font-weight: 700; color: var(--accent); text-shadow: 0 6px 30px rgba(0,0,0,.6); }
+  .status { width: 100%; max-width: 1400px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .status .err { color: var(--bad); }
+  #camInfo { color: var(--fg); }
+  #fps { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .ptz { width: 100%; max-width: 1400px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; }
+  .ptz strong { font-size: 14px; }
+  .ptz input[type=range] { width: 200px; accent-color: var(--accent); }
+  .ptz p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); flex-basis: 100%; }
+
+  .explain { width: 100%; max-width: 1400px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  @media (max-width: 860px) { .explain { grid-template-columns: minmax(0, 1fr); } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .card h2 { margin: 0; font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  .card p, .card ol, .card ul { margin: 0; font-size: 14px; line-height: 1.55; color: var(--muted); }
+  .card ol, .card ul { padding-left: 18px; }
+  .card b { color: var(--fg); font-weight: 600; }
+  .card code { font-family: var(--mono); font-size: 13px; color: var(--blue); }
+  footer { padding: 0 max(16px, env(safe-area-inset-left, 0px)) 24px max(16px, env(safe-area-inset-right, 0px)); text-align: center; font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="eyebrow">ML@PSU · MEDIAPIPE</span>
+    <h1>Body Controller Demos</h1>
+  </div>
+  <nav class="tabs" role="tablist" aria-label="Demo">
+    <button role="tab" data-mode="fingers" aria-selected="true"><span class="n">1</span>Fingers</button>
+    <button role="tab" data-mode="face" aria-selected="false"><span class="n">2</span>Face</button>
+    <button role="tab" data-mode="body" aria-selected="false"><span class="n">3</span>Full body</button>
+  </nav>
+  <div class="bar">
+    <button class="btn primary" id="cam">Start camera</button>
+    <label class="toggle" id="camWrap" hidden>Camera <select class="btn" id="camSel" aria-label="Choose camera"></select></label>
+    <label class="toggle"><input type="checkbox" id="mirror" checked> Mirror</label>
+    <button class="btn" id="snap" disabled>Snapshot</button>
+    <button class="btn" id="full">Fullscreen</button>
+  </div>
+</header>
+
+<main>
+  <div class="options" id="opts-fingers">
+    <span class="label">Fingers</span>
+    <span class="hint">Hold up one or two hands. Counts thumbs too, up to 10.</span>
+  </div>
+  <div class="options" id="opts-face" hidden>
+    <span class="label">Filter</span>
+    <button class="chip" data-face="glasses" aria-pressed="true">Sunglasses</button>
+    <button class="chip" data-face="horns" aria-pressed="false">Devil horns</button>
+    <button class="chip" data-face="crown" aria-pressed="false">Crown</button>
+    <button class="chip" data-face="mustache" aria-pressed="false">Mustache</button>
+    <button class="chip" data-face="nose" aria-pressed="false">Clown nose</button>
+    <button class="chip" data-face="none" aria-pressed="false">Mood only</button>
+    <span class="spacer"></span><span class="hint">Press <kbd>O</kbd> to cycle</span>
+  </div>
+  <div class="options" id="opts-body" hidden>
+    <span class="label">Character</span>
+    <button class="chip" data-body="otter" aria-pressed="true">Otter</button>
+    <button class="chip" data-body="robot" aria-pressed="false">Robot</button>
+    <button class="chip" data-body="skeleton" aria-pressed="false">X-ray skeleton</button>
+    <button class="chip" data-body="neon" aria-pressed="false">Neon trails</button>
+    <button class="chip" data-body="anime" aria-pressed="false">Anime girl</button>
+    <span class="spacer"></span>
+    <label class="toggle"><input type="checkbox" id="hide" checked> Hide person</label>
+    <button class="btn" id="plate" disabled>Capture empty background</button>
+  </div>
+
+  <div class="stage mirror" id="stage">
+    <canvas id="out"></canvas>
+    <div id="big" hidden></div>
+    <div id="loadingBadge" hidden></div>
+    <div class="overlay" id="intro">
+      <strong>Press Start camera</strong>
+      <span>Everything runs inside this browser tab. Your video never leaves your device.</span>
+    </div>
+    <div class="overlay" id="countWrap" hidden><div id="count">3</div></div>
+  </div>
+  <div class="status"><span id="status">Loading MediaPipe…</span><span><span id="camInfo"></span> <span id="fps"></span></span></div>
+
+  <section class="ptz" id="ptz" hidden>
+    <strong id="ptzTitle">OBSBOT controls</strong>
+    <label class="toggle" id="zoomWrap" hidden>Zoom <input type="range" id="zoom" aria-label="Camera zoom"> <span id="zoomVal"></span></label>
+    <button class="btn" id="recenter" hidden>Re-center camera</button>
+    <button class="btn" id="enablePtz" hidden>Enable zoom and gimbal controls</button>
+    <p id="ptzTips">Full body needs a still camera: turn off the OBSBOT’s AI tracking before you capture the background (use its tracking hand gesture or OBSBOT Center). The OBSBOT also responds to some hand gestures, which can move or zoom it during the Fingers demo. If your model lets you, turn gesture control off in OBSBOT Center.</p>
+  </section>
+
+  <section class="explain" id="explain-fingers">
+    <div class="card"><h2>Try it</h2><p>Hold up one or both hands and change how many fingers are out. Turn your hand sideways, it still counts. The number only changes once it’s steady, so it doesn’t flicker.</p></div>
+    <div class="card"><h2>How it works</h2><p>The <b>Hand Landmarker</b> returns 21 points per hand. A finger is up when its tip (8, 12, 16, 20) is farther from the wrist (0) than its middle joint (6, 10, 14, 18). The thumb folds sideways, so it’s measured from the pinky base (17) instead: it’s out when its tip (4) is farther from there than its knuckle (3).</p></div>
+    <div class="card"><h2>Make it yours</h2><p>Edit <code>renderFingers()</code>. Ideas: rock-paper-scissors, a volume knob from the pinch distance, air drawing with the index tip.</p></div>
+  </section>
+  <section class="explain" id="explain-face" hidden>
+    <div class="card"><h2>Try it</h2><p>Pick a filter, then turn and tilt your head. Smile, frown, raise your eyebrows, blink and wink: the mood detector reads each one. Some filters react: the glasses flash gold when you smile and the horns glow when you frown.</p></div>
+    <div class="card"><h2>How it works</h2><p>The <b>Face Landmarker</b> returns 478 points and 52 expression scores (blendshapes) from 0 to 1. Each filter is pinned to a few points, like the outer eye corners (33, 263), forehead (10) or nose tip (1), and scaled and rotated with your face. The mood detector combines scores such as <code>mouthSmileLeft</code>, <code>mouthFrownLeft</code>, <code>browDownLeft</code> and <code>jawOpen</code>.</p></div>
+    <div class="card"><h2>Make it yours</h2><p>Each filter is one function, like <code>drawHorns()</code> or <code>drawCrown()</code>. Copy one and anchor something new. The mood rules live in <code>readMood()</code>.</p></div>
+  </section>
+  <section class="explain" id="explain-body" hidden>
+    <div class="card"><h2>Try it</h2><ol><li>Stand back so the whole body fits, head to feet.</li><li>Step out, press <b>Capture empty background</b>, wait for the countdown.</li><li>Walk back in and pick a character. Up to two people at once.</li></ol></div>
+    <div class="card"><h2>How it works</h2><p>The <b>Pose Landmarker</b> returns 33 body points and a mask of the person’s pixels. The mask gets filled with the saved background, then a character is drawn on the joints. If the background stops matching, for example because the camera moved, the page tells you to capture it again.</p></div>
+    <div class="card"><h2>Make it yours</h2><p>Each character is one function: <code>drawOtter()</code>, <code>drawRobot()</code>, <code>drawSkeleton()</code>, <code>drawNeon()</code>, <code>drawAnime()</code>. Change the colors at the top of the script or add your own. Keep the camera still after capturing the background.</p></div>
+  </section>
+</main>
+<footer>Built with <a href="https://ai.google.dev/edge/mediapipe/solutions/guide">MediaPipe</a> · Try more models in <a href="https://mediapipe-studio.webapps.google.com/home">MediaPipe Studio</a> · Works best in Chrome or Edge</footer>
+
+<script>
+  setTimeout(() => {
+    if (!window.__mpReady) {
+      const s = document.getElementById("status");
+      s.textContent = "Couldn't load MediaPipe from cdn.jsdelivr.net. Check your internet connection and refresh.";
+      s.className = "err";
+    }
+  }, 25000);
+</script>
+
+<script type="module">
+import { FilesetResolver, HandLandmarker, FaceLandmarker, PoseLandmarker, DrawingUtils }
+  from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/vision_bundle.mjs";
+
+const WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
+const M = "https://storage.googleapis.com/mediapipe-models/";
+const MODELS = {
+  fingers: { cls: HandLandmarker, name: "hand", path: M + "hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+             opts: { numHands: 2, minHandDetectionConfidence: 0.6, minHandPresenceConfidence: 0.6, minTrackingConfidence: 0.5 } },
+  face:    { cls: FaceLandmarker, name: "face", path: M + "face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+             opts: { numFaces: 2, outputFaceBlendshapes: true, minFaceDetectionConfidence: 0.5, minFacePresenceConfidence: 0.5, minTrackingConfidence: 0.5 } },
+  body:    { cls: PoseLandmarker, name: "pose", path: M + "pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task",
+             opts: { numPoses: 2, outputSegmentationMasks: true, minPoseDetectionConfidence: 0.5, minPosePresenceConfidence: 0.5, minTrackingConfidence: 0.5 } },
+};
+
+// ---------- palettes (tweak me) ----------
+const OTTER = { fur: "#7B4A2A", dark: "#3E2414", belly: "#D9B48A", muzzle: "#EBD3B0", nose: "#24160E", eye: "#140D09", whisker: "#F7EEDF" };
+const ROBOT = { metal: "#A9B4BF", light: "#D5DDE5", dark: "#3B4552", visor: "#59E0FF", accent: "#FF8A3D", bolt: "#5B6672" };
+const NEON = { left: "#FF4FD8", right: "#3FE0FF", core: "#FFFFFF" };
+const ANIME = { hair: "#D9773F", hairDark: "#8A3A16", hairShine: "#F5B07A", skin: "#FFE3D1", skinLine: "#D59A84", blush: "rgba(255,110,140,0.45)",
+                dress: "#2F3D73", dressDark: "#1C2547", collar: "#F6F3EC", ribbon: "#E2304A", iris: "#4F86E0", irisDark: "#1F3F8A", sock: "#F6F3EC", shoe: "#6B2E1E" };
+
+const $ = (id) => document.getElementById(id);
+const video = document.createElement("video");
+video.playsInline = true; video.muted = true;
+const out = $("out"), octx = out.getContext("2d");
+const draw = new DrawingUtils(octx);
+const plate = document.createElement("canvas"), plctx = plate.getContext("2d");
+const maskCv = document.createElement("canvas"), mctx = maskCv.getContext("2d");
+const layer = document.createElement("canvas"), lctx = layer.getContext("2d");
+const trail = document.createElement("canvas"), tctx = trail.getContext("2d");
+const tiny = document.createElement("canvas"); tiny.width = 64; tiny.height = 36;
+const tctxTiny = tiny.getContext("2d", { willReadFrequently: true });
+
+let mode = "fingers", faceStyle = "glasses", bodyStyle = "otter";
+let fileset = null, stream = null, hasPlate = false, maskImg = null, plateStale = 0;
+let lastVideoTime = -1, lastTs = 0, fps = 0, lastFrame = performance.now(), errorCount = 0, frameNo = 0;
+const detectors = {}, loading = {}, delegates = {}, forceCPU = new Set();
+let bodySmooth = [], faceSmooth = [], moodSmooth = null, fingerHist = [];
+let lastFace = { t: 0, faces: [] }, lastBody = { t: 0, people: [] };
+let camera = { label: "", isObsbot: false, ptz: { zoom: null, pan: null, tilt: null } };
+let lastPanel = 0;
+
+function setStatus(t, err = false) { $("status").textContent = t; $("status").className = err ? "err" : ""; }
+
+// ---------- models ----------
+async function getDetector(m) {
+  if (detectors[m]) return detectors[m];
+  if (!loading[m]) {
+    loading[m] = (async () => {
+      for (const delegate of forceCPU.has(m) ? ["CPU"] : ["GPU", "CPU"]) {
+        try {
+          const d = await MODELS[m].cls.createFromOptions(fileset, {
+            baseOptions: { modelAssetPath: MODELS[m].path, delegate }, runningMode: "VIDEO", ...MODELS[m].opts,
+          });
+          detectors[m] = d; delegates[m] = delegate; return d;
+        } catch (e) { if (delegate === "CPU") throw e; }
+      }
+    })();
+  }
+  try {
+    const d = await loading[m];
+    if (m === mode) { $("loadingBadge").hidden = true; setStatus(readyText()); }
+    return d;
+  } catch (e) {
+    delete loading[m];
+    if (m === mode) setStatus(`Couldn't load the ${MODELS[m].name} model: ${e.message || e}. Check your connection and refresh.`, true);
+    return null;
+  }
+}
+// Load the other two models quietly after the first, so switching tabs is instant.
+function preloadOthers() {
+  const rest = Object.keys(MODELS).filter((m) => m !== mode);
+  let i = 0;
+  const next = () => { if (i < rest.length) getDetector(rest[i++]).finally(() => setTimeout(next, 300)); };
+  setTimeout(next, 800);
+}
+function readyText() {
+  if (!stream) return "Ready. Press Start camera.";
+  if (mode === "body" && !hasPlate) return "Tip: capture the empty background first for a clean disappearing act.";
+  return `Running the ${MODELS[mode].name} model on ${delegates[mode] || "…"}.`;
+}
+
+// ---------- modes and options ----------
+const FACE_STYLES = ["glasses", "horns", "crown", "mustache", "nose", "none"];
+const BODY_STYLES = ["otter", "robot", "skeleton", "neon", "anime"];
+
+function setMode(m, push = true) {
+  if (m === "otter") { m = "body"; bodyStyle = "otter"; }
+  const [base, sub] = String(m).split("-");
+  if (!MODELS[base]) { m = "fingers"; } else { m = base; }
+  if (m === "face" && FACE_STYLES.includes(sub)) faceStyle = sub;
+  if (m === "body" && BODY_STYLES.includes(sub)) bodyStyle = sub;
+  mode = m;
+  document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.mode === m)));
+  for (const k of Object.keys(MODELS)) { $(`explain-${k}`).hidden = k !== m; $(`opts-${k}`).hidden = k !== m; }
+  syncChips();
+  $("big").hidden = true;
+  bodySmooth = []; faceSmooth = []; moodSmooth = null; fingerHist = [];
+  lastFace = { t: 0, faces: [] }; lastBody = { t: 0, people: [] };
+  tctx.clearRect(0, 0, trail.width, trail.height);
+  if (push) writeHash();
+  if (m === "body" && camera.ptz.zoom && stream) setZoom(camera.ptz.zoom.min, "Zoomed the camera out so the whole body fits.");
+  if (fileset) {
+    if (!detectors[m]) { $("loadingBadge").hidden = false; $("loadingBadge").textContent = `Loading ${MODELS[m].name} model…`; }
+    getDetector(m);
+  }
+}
+function writeHash() {
+  const h = mode === "face" ? `face-${faceStyle}` : mode === "body" ? `body-${bodyStyle}` : "fingers";
+  try { history.replaceState(null, "", `#${h}`); } catch {}
+}
+function syncChips() {
+  document.querySelectorAll("[data-face]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.face === faceStyle)));
+  document.querySelectorAll("[data-body]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.body === bodyStyle)));
+}
+function setFaceStyle(s) { faceStyle = s; syncChips(); writeHash(); }
+function setBodyStyle(s) { bodyStyle = s; tctx.clearRect(0, 0, trail.width, trail.height); syncChips(); writeHash(); }
+
+// ---------- camera ----------
+const CAM_KEY = "bodydemos.camera", PTZ_KEY = "bodydemos.ptz";
+const load = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+const save = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+
+function cameraError(e) {
+  return e.name === "NotAllowedError" ? "Camera permission was blocked. Allow it from the address bar and try again."
+    : e.name === "NotFoundError" ? "No camera found. Plug one in, or check that no other app is using it."
+    : e.name === "NotReadableError" ? "That camera is busy. Close other apps using it (Zoom, Teams, OBS, OBSBOT Center preview) and try again."
+    : e.name === "OverconstrainedError" ? "That camera doesn't support the requested settings. Pick another camera."
+    : `Camera error: ${e.message}`;
+}
+
+// Open a camera. 720p at 30 fps keeps MediaPipe fast even on 4K webcams like the OBSBOT.
+async function openCamera(deviceId, { ptz = false } = {}) {
+  const base = { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } };
+  const ptzWanted = ptz && navigator.mediaDevices.getSupportedConstraints?.().pan;
+  const build = (id, withPtz) => ({ ...base, ...(id ? { deviceId: { exact: id } } : {}), ...(withPtz ? { pan: true, tilt: true, zoom: true } : {}) });
+  let next = null;
+  const attempts = [[deviceId, ptzWanted], [deviceId, false], [null, false]];
+  let lastErr = null;
+  for (const [id, withPtz] of attempts) {
+    if (id === undefined) continue;
+    try { next = await navigator.mediaDevices.getUserMedia({ video: build(id, withPtz), audio: false }); break; }
+    catch (e) { lastErr = e; if (e.name === "NotAllowedError" && !withPtz) throw e; }
+  }
+  if (!next) throw lastErr;
+  stream?.getTracks().forEach((t) => t.stop());
+  stream = next;
+  const track = stream.getVideoTracks()[0];
+  track.addEventListener("ended", () => { if (stream && stream.getVideoTracks()[0] === track) setStatus("Camera disconnected. Pick another camera from the list.", true); });
+  video.srcObject = stream;
+  await video.play();
+  if (!video.videoWidth) await new Promise((r) => video.addEventListener("loadedmetadata", r, { once: true }));
+  const W = video.videoWidth, H = video.videoHeight;
+  for (const c of [out, plate, layer, trail]) { c.width = W; c.height = H; }
+  $("stage").style.setProperty("--ar", (W / H).toFixed(4));
+  lastVideoTime = -1; bodySmooth = []; faceSmooth = []; fingerHist = [];
+  const s = track.getSettings();
+  if (s.deviceId) save(CAM_KEY, s.deviceId);
+  describeCamera(track);
+  await listCameras();
+  return track;
+}
+
+function describeCamera(track) {
+  const s = track.getSettings();
+  camera.label = track.label || "Camera";
+  camera.isObsbot = /obsbot/i.test(camera.label);
+  const caps = track.getCapabilities ? track.getCapabilities() : {};
+  const range = (k) => (caps[k] && typeof caps[k].min === "number" && caps[k].max > caps[k].min ? caps[k] : null);
+  camera.ptz = { zoom: range("zoom"), pan: range("pan"), tilt: range("tilt") };
+  if (camera.isObsbot && (camera.ptz.zoom || camera.ptz.pan)) save(PTZ_KEY, "1");
+  const fpsTxt = s.frameRate ? `, ${Math.round(s.frameRate)} fps` : "";
+  $("camInfo").textContent = `${camera.label} · ${s.width || video.videoWidth}×${s.height || video.videoHeight}${fpsTxt} ·`;
+  window.__camera = { label: camera.label, isObsbot: camera.isObsbot, width: s.width, height: s.height, frameRate: s.frameRate, ptz: { ...camera.ptz } };
+  // OBSBOT panel: tips always, live controls when the browser exposes them
+  const supportsPtz = !!navigator.mediaDevices.getSupportedConstraints?.().pan;
+  const hasCtl = camera.ptz.zoom || camera.ptz.pan || camera.ptz.tilt;
+  $("ptz").hidden = !(camera.isObsbot || hasCtl);
+  $("ptzTitle").textContent = camera.isObsbot ? `OBSBOT detected: ${camera.label}` : "Camera controls";
+  $("ptzTips").hidden = !camera.isObsbot;
+  $("enablePtz").hidden = !(camera.isObsbot && !hasCtl && supportsPtz);
+  $("zoomWrap").hidden = !camera.ptz.zoom;
+  $("recenter").hidden = !(camera.ptz.pan || camera.ptz.tilt);
+  if (camera.ptz.zoom) {
+    const z = $("zoom"); z.min = camera.ptz.zoom.min; z.max = camera.ptz.zoom.max; z.step = camera.ptz.zoom.step || 1;
+    z.value = s.zoom ?? camera.ptz.zoom.min; $("zoomVal").textContent = Number(z.value).toFixed(0);
+  }
+}
+
+async function setZoom(v, note) {
+  const track = stream?.getVideoTracks()[0];
+  if (!track || !camera.ptz.zoom) return;
+  try {
+    await track.applyConstraints({ advanced: [{ zoom: Number(v) }] });
+    $("zoom").value = v; $("zoomVal").textContent = Number(v).toFixed(0);
+    invalidatePlate("The camera zoom changed, so capture the empty background again.");
+    if (note) setStatus(note);
+  } catch (e) { setStatus(`Couldn't change zoom: ${e.message}`, true); }
+}
+async function recenter() {
+  const track = stream?.getVideoTracks()[0];
+  if (!track) return;
+  const c = {}; const clamp = (r) => Math.min(r.max, Math.max(r.min, 0));
+  if (camera.ptz.pan) c.pan = clamp(camera.ptz.pan);
+  if (camera.ptz.tilt) c.tilt = clamp(camera.ptz.tilt);
+  try { await track.applyConstraints({ advanced: [c] }); invalidatePlate("The camera moved, so capture the empty background again."); setStatus("Camera re-centered."); }
+  catch (e) { setStatus(`Couldn't move the camera: ${e.message}`, true); }
+}
+
+async function listCameras() {
+  if (!navigator.mediaDevices?.enumerateDevices) return;
+  const cams = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput");
+  const current = stream?.getVideoTracks()[0]?.getSettings().deviceId;
+  const sel = $("camSel");
+  sel.replaceChildren(...cams.map((c, i) => {
+    const o = document.createElement("option");
+    o.value = c.deviceId; o.textContent = c.label || `Camera ${i + 1}`;
+    o.selected = c.deviceId === current;
+    return o;
+  }));
+  $("camWrap").hidden = !stream || cams.length < 2;
+}
+
+async function startCamera() {
+  if (stream) {
+    stream.getTracks().forEach((t) => t.stop()); stream = null;
+    $("cam").textContent = "Start camera"; $("plate").disabled = $("snap").disabled = true; $("camWrap").hidden = true;
+    $("intro").hidden = false; $("big").hidden = true; $("camInfo").textContent = ""; $("fps").textContent = ""; $("ptz").hidden = true;
+    octx.clearRect(0, 0, out.width, out.height);
+    setStatus(readyText()); return;
+  }
+  if (!navigator.mediaDevices?.getUserMedia) { setStatus("The camera only works on https:// pages, http://localhost, or a file opened in Chrome.", true); return; }
+  try {
+    await openCamera(load(CAM_KEY), { ptz: load(PTZ_KEY) === "1" });
+  } catch (e) { setStatus(cameraError(e), true); return; }
+  $("intro").hidden = true; $("cam").textContent = "Stop camera";
+  $("plate").disabled = $("snap").disabled = false;
+  setStatus(readyText());
+}
+
+async function switchCamera(id, opts) {
+  try {
+    const track = await openCamera(id, opts);
+    invalidatePlate(null);
+    setStatus(`Switched to ${track.label || "camera"}.${mode === "body" ? " Capture the empty background again." : ""}`);
+  } catch (e) { setStatus(cameraError(e), true); await listCameras(); }
+}
+
+// ---------- background plate ----------
+function capturePlate() {
+  let n = 3;
+  $("countWrap").hidden = false; $("count").textContent = n;
+  setStatus("Everybody out of the frame…");
+  const tick = setInterval(() => {
+    n--;
+    if (n > 0) { $("count").textContent = n; return; }
+    clearInterval(tick);
+    $("countWrap").hidden = true;
+    plctx.drawImage(video, 0, 0, plate.width, plate.height);
+    hasPlate = true; plateStale = 0;
+    setStatus("Background saved. Step back in!");
+  }, 1000);
+}
+function invalidatePlate(msg) {
+  if (!hasPlate) return;
+  hasPlate = false; plateStale = 0;
+  if (msg && mode === "body") setStatus(msg);
+}
+// Every ~half second, compare the saved background with the live frame outside the person.
+// A big difference means the camera moved (e.g. OBSBOT tracking) or the lighting changed.
+function checkPlate() {
+  const w = tiny.width, h = tiny.height;
+  tctxTiny.drawImage(video, 0, 0, w, h); const a = tctxTiny.getImageData(0, 0, w, h).data;
+  tctxTiny.drawImage(plate, 0, 0, w, h); const b = tctxTiny.getImageData(0, 0, w, h).data;
+  tctxTiny.clearRect(0, 0, w, h); tctxTiny.drawImage(maskCv, 0, 0, w, h); const m = tctxTiny.getImageData(0, 0, w, h).data;
+  let sum = 0, n = 0;
+  for (let i = 0; i < a.length; i += 4) {
+    if (m[i + 3] > 10) continue;
+    sum += Math.abs((a[i] + a[i + 1] + a[i + 2]) - (b[i] + b[i + 1] + b[i + 2])) / 3; n++;
+  }
+  const diff = n > 50 ? sum / n : 0;
+  plateStale = diff > 26 ? plateStale + 1 : 0;
+  if (plateStale === 3) setStatus("The background no longer matches (did the camera move?). Press Capture empty background again.", true);
+}
+
+// ---------- geometry ----------
+const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
+const add = (a, b) => ({ x: a.x + b.x, y: a.y + b.y });
+const mul = (a, k) => ({ x: a.x * k, y: a.y * k });
+const len = (a) => Math.hypot(a.x, a.y) || 1e-6;
+const norm = (a) => mul(a, 1 / len(a));
+const dist = (a, b) => len(sub(a, b));
+const toPx = (p) => ({ x: p.x * out.width, y: p.y * out.height, v: p.visibility ?? 1 });
+const ema = (prev, cur, k) => (prev ? prev + (cur - prev) * k : cur);
+
+// ============================================================================
+// 1. FINGERS
+// ============================================================================
+function countHand(P) {
+  const tips = [8, 12, 16, 20], joints = [6, 10, 14, 18];
+  const up = tips.filter((t, k) => dist(P[t], P[0]) > dist(P[joints[k]], P[0]));
+  // Thumb folds sideways: measure from the pinky base (17) instead of the wrist, with a 5% margin.
+  if (dist(P[4], P[17]) > dist(P[3], P[17]) * 1.05) up.push(4);
+  return up;
+}
+function renderFingers(result) {
+  octx.drawImage(video, 0, 0, out.width, out.height);
+  const lw = Math.max(2, out.width / 320);
+  const hands = [];
+  for (const hand of result.landmarks) {
+    draw.drawConnectors(hand, HandLandmarker.HAND_CONNECTIONS, { color: "#ECE9E2", lineWidth: lw });
+    draw.drawLandmarks(hand, { color: "#FF8A3D", lineWidth: 1, radius: lw * 1.2 });
+    const P = hand.map(toPx), up = countHand(P);
+    for (const t of up) { octx.beginPath(); octx.arc(P[t].x, P[t].y, lw * 3.5, 0, Math.PI * 2); octx.fillStyle = "#6CB4FF"; octx.fill(); }
+    hands.push({ n: up.length, x: hand[0].x });
+  }
+  const mirrored = $("mirror").checked;
+  hands.sort((a, b) => (mirrored ? b.x - a.x : a.x - b.x));   // left-to-right as the viewer sees it
+  const key = hands.map((h) => h.n).join("+");
+  // Steady display: show the most common reading over the last 8 frames
+  fingerHist.push(key); if (fingerHist.length > 8) fingerHist.shift();
+  const tally = {}; let best = key, bestN = 0;
+  for (const k of fingerHist) { tally[k] = (tally[k] || 0) + 1; if (tally[k] >= bestN) { bestN = tally[k]; best = k; } }
+  const big = $("big"); big.hidden = false;
+  if (best === "") { big.innerHTML = "–<small>show me a hand</small>"; return; }
+  const ns = best.split("+").map(Number);
+  big.innerHTML = ns.length === 1 ? `${ns[0]}<small>finger${ns[0] === 1 ? "" : "s"}</small>` : `${ns[0]} + ${ns[1]} = ${ns[0] + ns[1]}<small>fingers</small>`;
+}
+
+// ============================================================================
+// 2. FACE: filters + mood detector
+// ============================================================================
+const FACE_IDS = [1, 2, 0, 10, 152, 33, 263, 234, 454, 13, 14, 61, 291];
+function faceAnchors(i, lms) {
+  const prev = faceSmooth[i], cur = {};
+  for (const id of FACE_IDS) {
+    const p = toPx(lms[id]);
+    cur[id] = prev ? { x: ema(prev[id].x, p.x, 0.55), y: ema(prev[id].y, p.y, 0.55) } : p;
+  }
+  faceSmooth[i] = cur;
+  const A = cur;
+  const w = dist(A[234], A[454]), h = dist(A[10], A[152]);
+  let ang = Math.atan2(A[263].y - A[33].y, A[263].x - A[33].x);
+  if (ang > Math.PI / 2) ang -= Math.PI; else if (ang < -Math.PI / 2) ang += Math.PI;
+  return { A, w, h, ang };
+}
+// Draw in a face-aligned frame: origin at `at`, x along the eyes, units = face width.
+function inFace(F, at, fn) {
+  octx.save(); octx.translate(at.x, at.y); octx.rotate(F.ang); octx.scale(F.w, F.w); fn(); octx.restore();
+}
+
+function drawGlasses(F, mood) {
+  const c = lerp(F.A[33], F.A[263], 0.5);
+  inFace(F, c, () => {
+    const lw = 0.4, lh = 0.27, gap = 0.08, fr = 0.03;
+    octx.strokeStyle = "#0B0B0D"; octx.lineWidth = fr; octx.lineCap = "round";
+    octx.beginPath(); octx.moveTo(-gap / 2 - lw, -lh * 0.25); octx.lineTo(-0.56, -lh * 0.32); octx.stroke();
+    octx.beginPath(); octx.moveTo(gap / 2 + lw, -lh * 0.25); octx.lineTo(0.56, -lh * 0.32); octx.stroke();
+    octx.beginPath(); octx.moveTo(-gap / 2, -lh * 0.2); octx.quadraticCurveTo(0, -lh * 0.45, gap / 2, -lh * 0.2); octx.stroke();
+    for (const side of [-1, 1]) {
+      const x0 = side < 0 ? -gap / 2 - lw : gap / 2, r = lh * 0.35;
+      octx.beginPath();
+      octx.moveTo(x0 + r, -lh / 2); octx.lineTo(x0 + lw - r, -lh / 2); octx.quadraticCurveTo(x0 + lw, -lh / 2, x0 + lw, -lh / 2 + r);
+      octx.lineTo(x0 + lw, lh / 2 - r * 1.2); octx.quadraticCurveTo(x0 + lw, lh / 2, x0 + lw - r * 1.4, lh / 2);
+      octx.lineTo(x0 + r * 1.4, lh / 2); octx.quadraticCurveTo(x0, lh / 2, x0, lh / 2 - r * 1.2);
+      octx.lineTo(x0, -lh / 2 + r); octx.quadraticCurveTo(x0, -lh / 2, x0 + r, -lh / 2); octx.closePath();
+      const g = octx.createLinearGradient(0, -lh / 2, 0, lh / 2);
+      g.addColorStop(0, "rgba(30,32,40,0.96)"); g.addColorStop(1, "rgba(70,60,90,0.92)");
+      octx.fillStyle = g; octx.fill(); octx.lineWidth = fr; octx.strokeStyle = "#0B0B0D"; octx.stroke();
+      octx.save(); octx.clip();
+      octx.fillStyle = mood.smile > 0.55 ? "rgba(255,214,120,0.8)" : "rgba(255,255,255,0.22)";
+      octx.beginPath(); octx.moveTo(x0 + lw * 0.15, lh / 2); octx.lineTo(x0 + lw * 0.45, -lh / 2); octx.lineTo(x0 + lw * 0.62, -lh / 2); octx.lineTo(x0 + lw * 0.32, lh / 2);
+      octx.closePath(); octx.fill(); octx.restore();
+    }
+  });
+}
+
+function drawHorns(F, mood) {
+  const top = F.A[10];
+  inFace(F, top, () => {
+    const glow = Math.min(1, mood.frown * 1.6);
+    for (const s of [-1, 1]) {
+      octx.save(); octx.translate(s * 0.27, -0.02); octx.scale(s, 1);
+      octx.beginPath();
+      octx.moveTo(-0.1, 0.02);
+      octx.quadraticCurveTo(-0.13, -0.22, 0.09, -0.42);     // outer curve up to the tip
+      octx.quadraticCurveTo(0.0, -0.2, 0.1, 0.02);          // inner curve back down
+      octx.closePath();
+      const g = octx.createLinearGradient(0, 0.02, 0.05, -0.42);
+      g.addColorStop(0, "#7A0E12"); g.addColorStop(0.6, glow > 0.5 ? "#FF3B2F" : "#C81E24"); g.addColorStop(1, glow > 0.5 ? "#FFD27A" : "#FF6A4D");
+      octx.fillStyle = g;
+      if (glow > 0.3) { octx.shadowColor = "rgba(255,70,40,0.9)"; octx.shadowBlur = 40 * glow; }
+      octx.fill(); octx.shadowBlur = 0;
+      octx.lineWidth = 0.018; octx.strokeStyle = "#3A0507"; octx.stroke();
+      octx.restore();
+    }
+  });
+}
+
+function drawCrown(F, mood) {
+  const top = F.A[10];
+  inFace(F, top, () => {
+    const w = 0.78, base = -0.03, hgt = 0.3;
+    octx.beginPath();
+    octx.moveTo(-w / 2, base);
+    const peaks = 5;
+    for (let i = 0; i <= peaks * 2; i++) {
+      const x = -w / 2 + (w * i) / (peaks * 2);
+      const y = i % 2 === 0 ? base - hgt * (i === peaks ? 1 : 0.85) : base - hgt * 0.4;
+      octx.lineTo(x, y);
+    }
+    octx.lineTo(w / 2, base); octx.closePath();
+    const g = octx.createLinearGradient(0, base - hgt, 0, base);
+    g.addColorStop(0, "#FFE58A"); g.addColorStop(1, "#D99A1E");
+    octx.fillStyle = g; octx.fill(); octx.lineWidth = 0.016; octx.strokeStyle = "#7A4E06"; octx.stroke();
+    octx.fillStyle = "#C9881A"; octx.fillRect(-w / 2, base - 0.07, w, 0.07);
+    const gems = ["#E2304A", "#2E7BE0", "#2DB36A", "#2E7BE0", "#E2304A"];
+    gems.forEach((c, i) => {
+      octx.beginPath(); octx.arc(-w / 2 + w * (i + 0.5) / gems.length, base - 0.035, 0.024, 0, Math.PI * 2); octx.fillStyle = c; octx.fill();
+    });
+    if (mood.smile > 0.55) {   // sparkle when smiling
+      octx.fillStyle = "rgba(255,255,255,0.95)";
+      for (const [x, y, r] of [[-0.3, -0.36, 0.03], [0.05, -0.42, 0.04], [0.33, -0.33, 0.025]]) {
+        octx.beginPath(); octx.moveTo(x, y - r * 2); octx.lineTo(x + r * 0.5, y); octx.lineTo(x, y + r * 2); octx.lineTo(x - r * 0.5, y); octx.closePath(); octx.fill();
+        octx.beginPath(); octx.moveTo(x - r * 2, y); octx.lineTo(x, y + r * 0.5); octx.lineTo(x + r * 2, y); octx.lineTo(x, y - r * 0.5); octx.closePath(); octx.fill();
+      }
+    }
+  });
+}
+
+function drawMustache(F) {
+  const at = lerp(F.A[2], F.A[0], 0.55);
+  inFace(F, at, () => {
+    octx.fillStyle = "#2A1A10"; octx.strokeStyle = "#140C07"; octx.lineWidth = 0.01;
+    for (const s of [-1, 1]) {
+      octx.save(); octx.scale(s, 1);
+      octx.beginPath();
+      octx.moveTo(0, -0.02);
+      octx.bezierCurveTo(0.08, -0.07, 0.2, -0.05, 0.25, 0.0);
+      octx.bezierCurveTo(0.29, 0.04, 0.33, 0.0, 0.31, -0.05);   // curled tip
+      octx.bezierCurveTo(0.35, 0.03, 0.27, 0.08, 0.2, 0.05);
+      octx.bezierCurveTo(0.12, 0.03, 0.05, 0.05, 0, 0.03);
+      octx.closePath(); octx.fill(); octx.stroke();
+      octx.restore();
+    }
+  });
+}
+
+function drawClownNose(F, mood) {
+  const at = F.A[1];
+  inFace(F, at, () => {
+    const r = 0.11 * (1 + Math.min(0.25, mood.mouthOpen * 0.3));
+    const g = octx.createRadialGradient(-r * 0.35, -r * 0.35, r * 0.1, 0, 0, r);
+    g.addColorStop(0, "#FF8A8A"); g.addColorStop(0.5, "#E8202B"); g.addColorStop(1, "#9E0E16");
+    octx.beginPath(); octx.arc(0, 0, r, 0, Math.PI * 2); octx.fillStyle = g; octx.fill();
+    octx.beginPath(); octx.arc(-r * 0.35, -r * 0.4, r * 0.2, 0, Math.PI * 2); octx.fillStyle = "rgba(255,255,255,0.75)"; octx.fill();
+  });
+}
+
+// Mood detector: combine blendshape scores (0..1) into readable expressions.
+function readMood(cats) {
+  const s = (n) => cats.find((c) => c.categoryName === n)?.score ?? 0;
+  const avg = (a, b) => (s(a) + s(b)) / 2;
+  const raw = {
+    smile: avg("mouthSmileLeft", "mouthSmileRight"),
+    frown: Math.min(1, Math.max(avg("mouthFrownLeft", "mouthFrownRight") * 1.8, avg("browDownLeft", "browDownRight") * 1.1)),
+    surprise: Math.min(1, 0.55 * Math.max(s("browInnerUp"), avg("browOuterUpLeft", "browOuterUpRight")) + 0.45 * Math.max(s("jawOpen"), avg("eyeWideLeft", "eyeWideRight"))),
+    mouthOpen: s("jawOpen"),
+    blinkL: s("eyeBlinkLeft"), blinkR: s("eyeBlinkRight"),
+  };
+  if (raw.smile > 0.4) raw.frown *= 0.4;            // a big smile pulls the brows down too
+  const m = moodSmooth || raw;
+  for (const k of Object.keys(raw)) m[k] = ema(m[k], raw[k], 0.45);
+  moodSmooth = m;
+  const blink = m.blinkL > 0.5 && m.blinkR > 0.5;
+  const wink = !blink && Math.abs(m.blinkL - m.blinkR) > 0.35 && Math.max(m.blinkL, m.blinkR) > 0.5;
+  const scores = [["Smiling", m.smile, 0.45], ["Frowning", m.frown, 0.42], ["Surprised", m.surprise, 0.42]];
+  const top = scores.filter(([, v, t]) => v > t).sort((a, b) => b[1] - a[1])[0];
+  return { ...m, blink, wink, headline: top ? top[0] : "Neutral" };
+}
+
+const FACE_DRAW = { glasses: drawGlasses, horns: drawHorns, crown: drawCrown, mustache: drawMustache, nose: drawClownNose, none: () => {} };
+function renderFace(result) {
+  octx.drawImage(video, 0, 0, out.width, out.height);
+  const now = performance.now();
+  let faces = result.faceLandmarks.map((lms, i) => ({ F: faceAnchors(i, lms), cats: result.faceBlendshapes?.[i]?.categories || [] }));
+  if (faces.length) lastFace = { t: now, faces };
+  else if (now - lastFace.t < 250) faces = lastFace.faces;     // ride through a brief dropout instead of flickering
+  faceSmooth.length = result.faceLandmarks.length || faceSmooth.length;
+  let mood = null;
+  faces.forEach(({ F, cats }, i) => {
+    const md = i === 0 ? (mood = readMood(cats)) : readMoodQuiet(cats);
+    FACE_DRAW[faceStyle](F, md);
+  });
+  const big = $("big"); big.hidden = false;
+  if (!faces.length) { big.innerHTML = "–<small>look at the camera</small>"; moodSmooth = null; return; }
+  if (now - lastPanel < 90) return; lastPanel = now;
+  const flags = [mood.blink && "Blink", mood.wink && "Wink", mood.mouthOpen > 0.45 && "Mouth open"].filter(Boolean);
+  const bar = (name, v, on) => `<span>${name}</span><span class="track"><i class="${on ? "on" : ""}" style="width:${Math.round(Math.min(1, v) * 120)}px"></i></span><b>${Math.round(v * 100)}</b>`;
+  big.innerHTML = `${mood.headline}<small>${flags.length ? flags.join(" · ") : "mood detector"}</small>
+    <div class="bars">${bar("Smile", mood.smile, mood.headline === "Smiling")}${bar("Frown", mood.frown, mood.headline === "Frowning")}${bar("Surprise", mood.surprise, mood.headline === "Surprised")}${bar("Mouth open", mood.mouthOpen, mood.mouthOpen > 0.45)}</div>`;
+}
+function readMoodQuiet(cats) {   // second face: filters react, but it doesn't drive the readout
+  const s = (n) => cats.find((c) => c.categoryName === n)?.score ?? 0;
+  return { smile: (s("mouthSmileLeft") + s("mouthSmileRight")) / 2, frown: (s("browDownLeft") + s("browDownRight")) / 2, mouthOpen: s("jawOpen") };
+}
+
+// ============================================================================
+// 3. FULL BODY: characters
+// ============================================================================
+function smoothedBody(i, lms) {
+  const prev = bodySmooth[i], cur = lms.map(toPx);
+  if (!prev) { bodySmooth[i] = cur; return cur; }
+  bodySmooth[i] = cur.map((p, j) => {
+    const q = prev[j], d = Math.hypot(p.x - q.x, p.y - q.y);
+    const k = Math.min(0.85, 0.35 + d / (out.width * 0.05));   // smooth small jitter, follow fast moves
+    return { x: q.x + (p.x - q.x) * k, y: q.y + (p.y - q.y) * k, v: ema(q.v, p.v, 0.5) };
+  });
+  return bodySmooth[i];
+}
+const vis = (P, ...ids) => ids.every((i) => P[i].v > 0.4);
+function bodyFrame(P) {
+  const sh = lerp(P[11], P[12], 0.5), hip = lerp(P[23], P[24], 0.5);
+  const sw = dist(P[11], P[12]), hw = dist(P[23], P[24]);
+  const s = Math.max(sw, 30), up = sub(sh, hip), upN = norm(up), torso = len(up);
+  return { sh, hip, sw, hw, s, up, upN, torso, side: { x: -upN.y, y: upN.x }, rot: Math.atan2(upN.y, upN.x) + Math.PI / 2 };
+}
+function headFrame(P, B) {
+  const earsOk = P[7].v > 0.3 && P[8].v > 0.3;
+  const earMid = earsOk ? lerp(P[7], P[8], 0.5) : P[0];
+  const r = Math.max(earsOk ? dist(P[7], P[8]) * 0.9 : 0, B.s * 0.5);
+  let u = earsOk ? norm(sub(P[8], P[7])) : { x: 1, y: 0 };
+  if (u.x < 0) u = mul(u, -1);                 // keep the head the right way up whichever way the ears are ordered
+  const n = { x: u.y, y: -u.x };                // points up out of the head
+  return { c: add(lerp(earMid, P[0], 0.3), mul(n, r * 0.12)), r, u, n, tilt: Math.atan2(u.y, u.x) };
+}
+function stroke(pts, color, w, cap = "round") {
+  if (pts.length < 2) return;
+  octx.beginPath(); octx.moveTo(pts[0].x, pts[0].y); for (const p of pts.slice(1)) octx.lineTo(p.x, p.y);
+  octx.strokeStyle = color; octx.lineWidth = w; octx.lineCap = cap; octx.lineJoin = "round"; octx.stroke();
+}
+function chain(P, ids) { const pts = []; for (const id of ids) { if (P[id].v < 0.35) break; pts.push(P[id]); } return pts; }
+function blob(c, rx, ry, rot, fill, outline, ow = 0) {
+  octx.beginPath(); octx.ellipse(c.x, c.y, Math.max(rx, 1), Math.max(ry, 1), rot, 0, Math.PI * 2);
+  octx.fillStyle = fill; octx.fill();
+  if (ow) { octx.lineWidth = ow; octx.strokeStyle = outline; octx.stroke(); }
+}
+function rbox(c, w, h, rot, r, fill, outline, ow) {
+  octx.save(); octx.translate(c.x, c.y); octx.rotate(rot);
+  octx.beginPath(); octx.roundRect(-w / 2, -h / 2, w, h, r);
+  octx.fillStyle = fill; octx.fill(); if (ow) { octx.lineWidth = ow; octx.strokeStyle = outline; octx.stroke(); }
+  octx.restore();
+}
+
+// --- Otter ---
+function drawOtter(P) {
+  const C = OTTER, B = bodyFrame(P), { s, upN, torso, side } = B, ow = Math.max(2, s * 0.05);
+  const t0 = add(B.hip, mul(upN, -torso * 0.15));
+  const t1 = add(t0, add(mul(upN, -torso * 0.7), mul(side, s * 0.8)));
+  const t2 = add(t0, add(mul(upN, -torso * 0.85), mul(side, s * 1.8)));
+  for (const pass of [0, 1]) for (let i = 0; i <= 30; i++) {
+    const t = i / 30, p = lerp(lerp(t0, t1, t), lerp(t1, t2, t), t);
+    octx.beginPath(); octx.arc(p.x, p.y, s * (0.3 - 0.24 * t) + (pass ? 0 : ow), 0, Math.PI * 2); octx.fillStyle = pass ? C.fur : C.dark; octx.fill();
+  }
+  for (const [h, k, a, toe] of [[23, 25, 27, 31], [24, 26, 28, 32]]) {
+    const pts = chain(P, [h, k, a]); stroke(pts, C.dark, s * 0.47); stroke(pts, C.fur, s * 0.4);
+    if (pts.length === 3 && P[toe].v > 0.3) { const d = sub(P[toe], P[a]); blob(lerp(P[a], P[toe], 0.5), Math.max(len(d) * 0.75, s * 0.18), s * 0.13, Math.atan2(d.y, d.x), C.dark); }
+  }
+  const bc = lerp(B.hip, B.sh, 0.45), rot = Math.atan2(-upN.x, upN.y);
+  const rx = Math.max(B.sw, B.hw) * 0.6 + s * 0.08, ry = torso * 0.72 + s * 0.12;
+  blob(bc, rx, ry, rot, C.fur, C.dark, ow);
+  blob(add(bc, mul(upN, torso * 0.08)), rx * 0.6, ry * 0.86, rot, C.belly);
+  for (const [shd, elb, wr, idx] of [[11, 13, 15, 19], [12, 14, 16, 20]]) {
+    const pts = chain(P, [shd, elb, wr]); stroke(pts, C.dark, s * 0.35); stroke(pts, C.fur, s * 0.3);
+    if (pts.length === 3) blob(P[idx].v > 0.3 ? lerp(P[wr], P[idx], 0.55) : P[wr], s * 0.22, s * 0.2, 0, C.fur, C.dark, ow);
+  }
+  const Hd = headFrame(P, B), { c, r, u, n, tilt } = Hd;
+  for (const sg of [-1, 1]) { const ep = add(c, add(mul(u, sg * r * 0.98), mul(n, r * 0.38))); blob(ep, r * 0.17, r * 0.17, 0, C.fur, C.dark, ow); blob(ep, r * 0.08, r * 0.08, 0, C.dark); }
+  blob(c, r * 1.12, r * 0.9, tilt, C.fur, C.dark, ow);
+  const mz = add(lerp(c, P[0], 0.8), mul(n, -r * 0.22));
+  blob(mz, r * 0.78, r * 0.5, tilt, C.muzzle);
+  blob(add(P[0], mul(n, -r * 0.05)), r * 0.17, r * 0.11, tilt, C.nose);
+  for (const e of [2, 5]) { const ep = P[e].v > 0.3 ? P[e] : add(c, mul(u, (e === 2 ? 1 : -1) * r * 0.35)); blob(ep, r * 0.11, r * 0.11, 0, C.eye); blob(add(ep, { x: r * 0.035, y: -r * 0.04 }), r * 0.04, r * 0.04, 0, "#FFFFFF"); }
+  octx.strokeStyle = C.whisker; octx.lineWidth = Math.max(1.5, r * 0.025); octx.lineCap = "round";
+  for (const sg of [-1, 1]) for (const k of [-0.18, 0, 0.18]) { const a = add(mz, mul(u, sg * r * 0.3)), b = add(a, mul(norm(add(mul(u, sg), mul(n, k))), r * 0.62)); octx.beginPath(); octx.moveTo(a.x, a.y); octx.lineTo(b.x, b.y); octx.stroke(); }
+}
+
+// --- Robot ---
+function drawRobot(P) {
+  const C = ROBOT, B = bodyFrame(P), { s, torso } = B, ow = Math.max(2, s * 0.04);
+  const limb = (ids, w) => {
+    const pts = chain(P, ids);
+    stroke(pts, C.dark, w * 1.2, "butt"); stroke(pts, C.metal, w, "butt");
+    pts.forEach((p) => { blob(p, w * 0.62, w * 0.62, 0, C.light, C.dark, ow); blob(p, w * 0.18, w * 0.18, 0, C.bolt); });
+    return pts;
+  };
+  for (const [h, k, a, toe] of [[23, 25, 27, 31], [24, 26, 28, 32]]) {
+    const pts = limb([h, k, a], s * 0.32);
+    if (pts.length === 3) { const d = P[toe].v > 0.3 ? sub(P[toe], P[a]) : { x: s * 0.3, y: 0 }; rbox(lerp(P[a], add(P[a], d), 0.45), Math.max(len(d), s * 0.3) * 1.2, s * 0.2, Math.atan2(d.y, d.x), s * 0.05, C.dark, C.dark, 0); }
+  }
+  const bc = lerp(B.hip, B.sh, 0.5), tw = Math.max(B.sw, B.hw) * 1.15, th = torso * 1.12;
+  rbox(bc, tw, th, B.rot, s * 0.12, C.metal, C.dark, ow);
+  rbox(bc, tw * 0.62, th * 0.42, B.rot, s * 0.06, C.dark, C.dark, 0);
+  octx.save(); octx.translate(bc.x, bc.y); octx.rotate(B.rot);
+  const t = performance.now() / 300;
+  ["#5FD39A", "#FFD25A", C.accent].forEach((col, i) => {
+    octx.beginPath(); octx.arc(-tw * 0.18 + i * tw * 0.18, -th * 0.06, s * 0.06, 0, Math.PI * 2);
+    octx.fillStyle = Math.sin(t + i * 2) > -0.2 ? col : "#2A3038"; octx.fill();
+  });
+  octx.fillStyle = C.visor; octx.fillRect(-tw * 0.22, th * 0.06, tw * 0.44, s * 0.05);
+  octx.restore();
+  for (const [shd, elb, wr] of [[11, 13, 15], [12, 14, 16]]) {
+    const pts = limb([shd, elb, wr], s * 0.26);
+    if (pts.length === 3) {   // claw hand
+      const d = norm(sub(P[wr], P[elb])), sd = { x: -d.y, y: d.x }, base = P[wr];
+      for (const sg of [-1, 1]) stroke([base, add(base, add(mul(d, s * 0.22), mul(sd, sg * s * 0.12))), add(base, add(mul(d, s * 0.32), mul(sd, sg * s * 0.04)))], C.dark, s * 0.08);
+    }
+  }
+  const Hd = headFrame(P, B), { c, r, n, tilt } = Hd;
+  const tip = add(c, mul(n, r * 1.55));
+  stroke([add(c, mul(n, r * 0.8)), tip], C.dark, Math.max(3, r * 0.08));
+  blob(tip, r * 0.14, r * 0.14, 0, Math.sin(t * 1.3) > 0 ? "#FF4D4D" : "#8A2020");
+  rbox(c, r * 2.05, r * 1.75, tilt, r * 0.3, C.light, C.dark, ow);
+  rbox(add(c, mul(n, r * 0.05)), r * 1.6, r * 0.55, tilt, r * 0.27, C.dark, C.dark, 0);
+  octx.save(); octx.translate(c.x, c.y); octx.rotate(tilt);
+  octx.shadowColor = C.visor; octx.shadowBlur = r * 0.5; octx.fillStyle = C.visor;
+  for (const sg of [-1, 1]) { octx.beginPath(); octx.arc(sg * r * 0.42, -r * 0.05, r * 0.16, 0, Math.PI * 2); octx.fill(); }
+  octx.shadowBlur = 0; octx.fillStyle = C.dark;
+  for (let i = -2; i <= 2; i++) octx.fillRect(i * r * 0.2 - r * 0.06, r * 0.42, r * 0.12, r * 0.18);
+  octx.restore();
+}
+
+// --- X-ray skeleton ---
+function drawSkeleton(P) {
+  const B = bodyFrame(P), { s, torso } = B;
+  const bone = "#F4F1E8", shade = "#BDB7A6";
+  octx.save(); octx.shadowColor = "rgba(150,220,255,0.85)"; octx.shadowBlur = s * 0.25;
+  const boneSeg = (a, b, w) => { stroke([a, b], bone, w); blob(a, w * 0.75, w * 0.75, 0, bone); blob(b, w * 0.75, w * 0.75, 0, bone); };
+  for (const [a, b, w] of [[11, 13, 0.11], [13, 15, 0.09], [12, 14, 0.11], [14, 16, 0.09], [23, 25, 0.14], [25, 27, 0.12], [24, 26, 0.14], [26, 28, 0.12]])
+    if (vis(P, a, b)) boneSeg(P[a], P[b], s * w);
+  for (const [a, b] of [[15, 19], [16, 20], [27, 31], [28, 32]]) if (vis(P, a, b)) { stroke([P[a], P[b]], bone, s * 0.06); blob(P[b], s * 0.05, s * 0.05, 0, bone); }
+  if (vis(P, 11, 12)) stroke([P[11], P[12]], bone, s * 0.07);   // collarbone
+  octx.save(); octx.translate(lerp(B.sh, B.hip, 0.5).x, lerp(B.sh, B.hip, 0.5).y); octx.rotate(B.rot);
+  const W = Math.max(B.sw, s), H = torso;
+  for (let i = 0; i < 12; i++) { const y = -H / 2 + H * i / 11; octx.beginPath(); octx.ellipse(0, y, s * 0.06, s * 0.035, 0, 0, Math.PI * 2); octx.fillStyle = bone; octx.fill(); }   // spine
+  octx.lineCap = "round";
+  for (let i = 0; i < 6; i++) {   // ribs
+    const y = -H / 2 + H * (0.1 + i * 0.085), hw = W * 0.48 * (1 - i * 0.05);
+    octx.beginPath(); octx.ellipse(0, y, hw, H * 0.07, 0, 0.1, Math.PI - 0.1); octx.strokeStyle = bone; octx.lineWidth = s * 0.045; octx.stroke();
+  }
+  octx.beginPath(); octx.ellipse(0, H / 2, Math.max(B.hw, s * 0.6) * 0.75, H * 0.16, 0, Math.PI, 0); octx.fillStyle = bone; octx.fill();   // pelvis
+  octx.beginPath(); octx.ellipse(0, H / 2 - H * 0.02, Math.max(B.hw, s * 0.6) * 0.32, H * 0.08, 0, Math.PI, 0); octx.fillStyle = shade; octx.fill();
+  octx.restore();
+  const { c, r, tilt } = headFrame(P, B);
+  octx.save(); octx.translate(c.x, c.y); octx.rotate(tilt);
+  octx.beginPath(); octx.ellipse(0, -r * 0.1, r * 0.95, r * 1.05, 0, 0, Math.PI * 2); octx.fillStyle = bone; octx.fill();
+  octx.beginPath(); octx.roundRect(-r * 0.5, r * 0.55, r, r * 0.45, r * 0.15); octx.fill();   // jaw
+  octx.shadowBlur = 0; octx.fillStyle = "#14161A";
+  for (const sg of [-1, 1]) { octx.beginPath(); octx.ellipse(sg * r * 0.38, r * 0.05, r * 0.24, r * 0.27, 0, 0, Math.PI * 2); octx.fill(); }
+  octx.beginPath(); octx.moveTo(0, r * 0.3); octx.lineTo(-r * 0.1, r * 0.5); octx.lineTo(r * 0.1, r * 0.5); octx.closePath(); octx.fill();
+  for (let i = -2; i <= 2; i++) octx.fillRect(i * r * 0.17 - r * 0.02, r * 0.62, r * 0.04, r * 0.25);
+  octx.restore(); octx.restore();
+}
+
+// --- Anime girl (original design) ---
+function drawAnime(P) {
+  const C = ANIME, B = bodyFrame(P), { s, torso } = B, ow = Math.max(2, s * 0.03);
+  const Hd = headFrame(P, B), r = Hd.r * 1.2, c = add(Hd.c, mul(Hd.n, Hd.r * 0.05));
+  const outline = (col, w = ow) => { octx.lineWidth = w; octx.strokeStyle = col; octx.stroke(); };
+
+  // long hair behind everything
+  octx.save(); octx.translate(c.x, c.y); octx.rotate(Hd.tilt);
+  octx.beginPath();
+  octx.moveTo(-r * 1.0, -r * 0.3);
+  octx.bezierCurveTo(-r * 1.35, r * 0.6, -r * 1.3, r * 1.7, -r * 1.05, r * 2.7);
+  for (let i = 0; i <= 6; i++) octx.lineTo(-r * 1.05 + (r * 2.1 * i) / 6, r * (i % 2 ? 2.45 : 2.75));
+  octx.bezierCurveTo(r * 1.3, r * 1.7, r * 1.35, r * 0.6, r * 1.0, -r * 0.3);
+  octx.arc(0, -r * 0.1, r * 1.02, -0.2, Math.PI + 0.2, true);
+  octx.closePath(); octx.fillStyle = C.hair; octx.fill(); outline(C.hairDark);
+  octx.restore();
+
+  // legs: skin, then knee socks and shoes
+  for (const [h, k, a, toe] of [[23, 25, 27, 31], [24, 26, 28, 32]]) {
+    const pts = chain(P, [h, k, a]);
+    stroke(pts, C.skinLine, s * 0.25); stroke(pts, C.skin, s * 0.21);
+    if (pts.length === 3) {
+      const sockTop = lerp(P[k], P[a], 0.25);
+      stroke([sockTop, P[a]], C.skinLine, s * 0.25); stroke([sockTop, P[a]], C.sock, s * 0.21);
+      const d = P[toe].v > 0.3 ? sub(P[toe], P[a]) : { x: s * 0.25, y: 0 };
+      blob(lerp(P[a], add(P[a], d), 0.4), Math.max(len(d) * 0.7, s * 0.17), s * 0.11, Math.atan2(d.y, d.x), C.shoe, "#3A160C", ow);
+    }
+  }
+
+  // skirt and dress in the torso frame (local -y points up the body)
+  const legLen = (dist(P[23], P[25]) + dist(P[24], P[26])) / 2 || torso;
+  octx.save(); octx.translate(B.hip.x, B.hip.y); octx.rotate(B.rot);
+  const top = Math.max(B.hw * 1.25, s * 0.9), hem = top * 1.75, hy = legLen * 0.5;
+  octx.beginPath(); octx.moveTo(-top / 2, -torso * 0.08); octx.lineTo(top / 2, -torso * 0.08);
+  octx.lineTo(hem / 2, hy); octx.quadraticCurveTo(0, hy + legLen * 0.08, -hem / 2, hy); octx.closePath();
+  octx.fillStyle = C.dress; octx.fill(); outline(C.dressDark);
+  octx.strokeStyle = C.dressDark; octx.lineWidth = ow * 0.8;
+  for (const f of [-0.5, -0.17, 0.17, 0.5]) { octx.beginPath(); octx.moveTo(f * top, -torso * 0.05); octx.lineTo(f * hem * 0.95, hy); octx.stroke(); }   // pleats
+  octx.beginPath(); octx.moveTo(-hem / 2, hy - legLen * 0.06); octx.quadraticCurveTo(0, hy + legLen * 0.02, hem / 2, hy - legLen * 0.06);
+  octx.strokeStyle = C.collar; octx.lineWidth = Math.max(2, s * 0.035); octx.stroke();   // white trim
+  octx.restore();
+
+  // neck
+  stroke([B.sh, add(B.sh, mul(B.upN, torso * 0.25))], C.skinLine, s * 0.26); stroke([B.sh, add(B.sh, mul(B.upN, torso * 0.25))], C.skin, s * 0.22);
+
+  const bc = lerp(B.hip, B.sh, 0.5);
+  octx.save(); octx.translate(bc.x, bc.y); octx.rotate(B.rot);
+  const tw = Math.max(B.sw, s) * 1.0, ww = Math.max(B.hw, s * 0.7) * 1.0, th = torso * 1.05;
+  octx.beginPath(); octx.moveTo(-tw / 2, -th / 2);
+  octx.lineTo(tw / 2, -th / 2); octx.quadraticCurveTo(ww * 0.42, 0, ww * 0.55, th / 2);
+  octx.lineTo(-ww * 0.55, th / 2); octx.quadraticCurveTo(-ww * 0.42, 0, -tw / 2, -th / 2); octx.closePath();
+  octx.fillStyle = C.dress; octx.fill(); outline(C.dressDark);
+  octx.beginPath(); octx.moveTo(-tw * 0.48, -th / 2); octx.lineTo(0, -th * 0.12); octx.lineTo(tw * 0.48, -th / 2);
+  octx.lineTo(tw * 0.3, -th / 2 - s * 0.02); octx.lineTo(0, -th * 0.24); octx.lineTo(-tw * 0.3, -th / 2 - s * 0.02); octx.closePath();
+  octx.fillStyle = C.collar; octx.fill(); outline(C.dressDark, ow * 0.8);   // sailor collar
+  const ry = -th * 0.13, rs = s * 0.16;
+  octx.fillStyle = C.ribbon;
+  for (const sg of [-1, 1]) { octx.beginPath(); octx.moveTo(0, ry); octx.lineTo(sg * rs, ry - rs * 0.6); octx.lineTo(sg * rs, ry + rs * 0.6); octx.closePath(); octx.fill(); outline("#8E1428", ow * 0.7); }
+  for (const sg of [-1, 1]) { octx.beginPath(); octx.moveTo(0, ry); octx.lineTo(sg * rs * 0.45, ry + rs * 1.6); octx.lineTo(sg * rs * 0.1, ry + rs * 1.5); octx.closePath(); octx.fill(); }
+  octx.beginPath(); octx.arc(0, ry, rs * 0.28, 0, Math.PI * 2); octx.fill();
+  octx.restore();
+
+  // arms: puffy sleeve to the elbow, then skin, then a hand
+  for (const [shd, elb, wr, idx] of [[11, 13, 15, 19], [12, 14, 16, 20]]) {
+    const pts = chain(P, [shd, elb, wr]);
+    if (pts.length >= 2) { stroke(pts.slice(0, 2), C.dressDark, s * 0.32); stroke(pts.slice(0, 2), C.dress, s * 0.28); blob(P[shd], s * 0.2, s * 0.2, 0, C.dress, C.dressDark, ow); }
+    if (pts.length === 3) {
+      stroke([P[elb], P[wr]], C.skinLine, s * 0.19); stroke([P[elb], P[wr]], C.skin, s * 0.15);
+      blob(P[elb], s * 0.15, s * 0.15, 0, C.collar, C.dressDark, ow * 0.8);   // cuff
+      blob(P[idx].v > 0.3 ? lerp(P[wr], P[idx], 0.5) : P[wr], s * 0.11, s * 0.12, 0, C.skin, C.skinLine, ow);
+    }
+  }
+
+  // head
+  octx.save(); octx.translate(c.x, c.y); octx.rotate(Hd.tilt);
+  octx.beginPath(); octx.moveTo(-r * 0.92, -r * 0.1);
+  octx.quadraticCurveTo(-r * 0.9, r * 0.75, 0, r * 1.05); octx.quadraticCurveTo(r * 0.9, r * 0.75, r * 0.92, -r * 0.1);
+  octx.arc(0, -r * 0.1, r * 0.92, 0, Math.PI, true); octx.closePath();
+  octx.fillStyle = C.skin; octx.fill(); outline(C.skinLine);
+  for (const sg of [-1, 1]) {   // big anime eyes
+    const ex = sg * r * 0.4, ey = r * 0.2;
+    const g = octx.createLinearGradient(0, ey - r * 0.26, 0, ey + r * 0.26);
+    g.addColorStop(0, C.irisDark); g.addColorStop(1, C.iris);
+    octx.beginPath(); octx.ellipse(ex, ey, r * 0.17, r * 0.25, 0, 0, Math.PI * 2); octx.fillStyle = g; octx.fill();
+    octx.beginPath(); octx.ellipse(ex, ey + r * 0.03, r * 0.08, r * 0.13, 0, 0, Math.PI * 2); octx.fillStyle = "#141022"; octx.fill();
+    octx.fillStyle = "#FFFFFF";
+    octx.beginPath(); octx.arc(ex - sg * r * 0.06, ey - r * 0.09, r * 0.06, 0, Math.PI * 2); octx.fill();
+    octx.beginPath(); octx.arc(ex + sg * r * 0.07, ey + r * 0.12, r * 0.03, 0, Math.PI * 2); octx.fill();
+    octx.beginPath(); octx.moveTo(ex - sg * r * 0.2, ey - r * 0.16);   // upper lashes with an outward flick
+    octx.quadraticCurveTo(ex, ey - r * 0.36, ex + sg * r * 0.24, ey - r * 0.2); octx.lineTo(ex + sg * r * 0.3, ey - r * 0.27);
+    octx.strokeStyle = "#2A1A14"; octx.lineWidth = Math.max(2, r * 0.07); octx.lineCap = "round"; octx.stroke();
+    octx.beginPath(); octx.moveTo(ex - sg * r * 0.15, ey - r * 0.46); octx.quadraticCurveTo(ex, ey - r * 0.53, ex + sg * r * 0.17, ey - r * 0.45);
+    octx.strokeStyle = C.hairDark; octx.lineWidth = Math.max(1.5, r * 0.035); octx.stroke();   // brows
+    octx.beginPath(); octx.ellipse(sg * r * 0.55, r * 0.5, r * 0.13, r * 0.06, 0, 0, Math.PI * 2); octx.fillStyle = C.blush; octx.fill();
+  }
+  octx.beginPath(); octx.moveTo(-r * 0.02, r * 0.5); octx.lineTo(r * 0.02, r * 0.53); octx.strokeStyle = C.skinLine; octx.lineWidth = Math.max(1.5, r * 0.03); octx.stroke();
+  octx.beginPath(); octx.arc(0, r * 0.62, r * 0.09, 0.15 * Math.PI, 0.85 * Math.PI); octx.strokeStyle = "#B4495A"; octx.lineWidth = Math.max(1.5, r * 0.035); octx.stroke();
+  // bangs and side locks
+  octx.beginPath(); octx.moveTo(-r * 1.02, r * 0.1);
+  octx.arc(0, -r * 0.1, r * 1.04, Math.PI + 0.2, -0.2);
+  const tips = [[0.86, -0.12], [0.72, 0.16], [0.52, -0.18], [0.32, 0.08], [0.12, -0.2], [-0.06, 0.1], [-0.27, -0.18], [-0.47, 0.12], [-0.68, -0.14], [-0.86, 0.14]];
+  octx.lineTo(r * 1.02, r * 0.1);
+  for (const [x, y] of tips) octx.lineTo(x * r, y * r);
+  octx.closePath(); octx.fillStyle = C.hair; octx.fill(); outline(C.hairDark);
+  for (const sg of [-1, 1]) {
+    octx.beginPath(); octx.moveTo(sg * r * 0.98, -r * 0.1);
+    octx.quadraticCurveTo(sg * r * 1.12, r * 0.7, sg * r * 0.86, r * 1.35);
+    octx.quadraticCurveTo(sg * r * 0.8, r * 0.6, sg * r * 0.74, r * 0.05); octx.closePath();
+    octx.fillStyle = C.hair; octx.fill(); outline(C.hairDark);
+  }
+  octx.beginPath(); octx.arc(0, -r * 0.1, r * 0.8, Math.PI * 1.2, Math.PI * 1.45);
+  octx.strokeStyle = C.hairShine; octx.lineWidth = Math.max(2, r * 0.09); octx.lineCap = "round"; octx.stroke();   // shine
+  // hair bow
+  octx.save(); octx.translate(r * 0.62, -r * 0.88); octx.rotate(0.35); octx.fillStyle = C.ribbon;
+  for (const sg of [-1, 1]) { octx.beginPath(); octx.moveTo(0, 0); octx.lineTo(sg * r * 0.36, -r * 0.2); octx.lineTo(sg * r * 0.36, r * 0.2); octx.closePath(); octx.fill(); outline("#8E1428"); }
+  octx.beginPath(); octx.arc(0, 0, r * 0.09, 0, Math.PI * 2); octx.fill(); outline("#8E1428");
+  octx.restore();
+  octx.restore();
+}
+
+// --- Neon trails ---
+function drawNeon(P, i) {
+  const B = bodyFrame(P), w = Math.max(4, B.s * 0.07);
+  const segs = PoseLandmarker.POSE_CONNECTIONS.filter((c) => c.start > 10 && c.end > 10);
+  tctx.lineCap = "round"; tctx.lineJoin = "round";
+  for (const { start: a, end: b } of segs) {
+    if (!vis(P, a, b)) continue;
+    const left = a % 2 === 1 && b % 2 === 1, right = a % 2 === 0 && b % 2 === 0;
+    const col = left ? NEON.left : right ? NEON.right : i % 2 ? NEON.right : NEON.left;
+    tctx.shadowColor = col; tctx.shadowBlur = w * 3;
+    tctx.strokeStyle = col; tctx.lineWidth = w; tctx.beginPath(); tctx.moveTo(P[a].x, P[a].y); tctx.lineTo(P[b].x, P[b].y); tctx.stroke();
+    tctx.shadowBlur = 0; tctx.strokeStyle = NEON.core; tctx.lineWidth = w * 0.35; tctx.beginPath(); tctx.moveTo(P[a].x, P[a].y); tctx.lineTo(P[b].x, P[b].y); tctx.stroke();
+  }
+  const { c, r } = headFrame(P, B);
+  tctx.shadowColor = NEON.right; tctx.shadowBlur = w * 3; tctx.strokeStyle = NEON.right; tctx.lineWidth = w;
+  tctx.beginPath(); tctx.arc(c.x, c.y, r * 0.95, 0, Math.PI * 2); tctx.stroke(); tctx.shadowBlur = 0;
+}
+
+const BODY_DRAW = { otter: drawOtter, robot: drawRobot, skeleton: drawSkeleton, neon: drawNeon, anime: drawAnime };
+const BODY_NAMES = { otter: ["otter", "otters"], robot: ["robot", "robots"], skeleton: ["skeleton", "skeletons"], neon: ["light trail", "light trails"], anime: ["anime girl", "anime girls"] };
+function renderBody(result) {
+  const W = out.width, H = out.height, now = performance.now();
+  octx.drawImage(video, 0, 0, W, H);
+  const masks = result.segmentationMasks || [];
+  if (masks.length) {
+    const mw = masks[0].width, mh = masks[0].height;
+    if (maskCv.width !== mw || maskCv.height !== mh || !maskImg) { maskCv.width = mw; maskCv.height = mh; maskImg = mctx.createImageData(mw, mh); maskImg.data.fill(255); }
+    const d = maskImg.data;
+    for (let i = 3; i < d.length; i += 4) d[i] = 0;
+    for (const m of masks) { const a = m.getAsFloat32Array(); for (let i = 0; i < a.length; i++) { const v = Math.min(255, a[i] * 400); if (v > d[i * 4 + 3]) d[i * 4 + 3] = v; } }
+    mctx.putImageData(maskImg, 0, 0);
+  } else if (maskImg) { mctx.clearRect(0, 0, maskCv.width, maskCv.height); }
+  if ($("hide").checked && masks.length) {
+    lctx.globalCompositeOperation = "source-over"; lctx.clearRect(0, 0, W, H);
+    if (hasPlate) lctx.drawImage(plate, 0, 0, W, H);
+    else { lctx.filter = "blur(28px)"; lctx.drawImage(video, 0, 0, W, H); lctx.filter = "none"; }
+    lctx.globalCompositeOperation = "destination-in"; lctx.filter = "blur(6px)";
+    lctx.drawImage(maskCv, 0, 0, W, H); lctx.drawImage(maskCv, 0, 0, W, H);
+    lctx.filter = "none"; lctx.globalCompositeOperation = "source-over";
+    octx.drawImage(layer, 0, 0);
+  }
+  if (hasPlate && masks.length && frameNo % 15 === 0) checkPlate();
+  if (bodyStyle === "skeleton" || bodyStyle === "neon") { octx.fillStyle = bodyStyle === "neon" ? "rgba(5,6,12,0.72)" : "rgba(8,14,24,0.6)"; octx.fillRect(0, 0, W, H); }
+
+  let people = result.landmarks.map((lms, i) => smoothedBody(i, lms));
+  if (people.length) { lastBody = { t: now, people }; bodySmooth.length = people.length; }
+  else if (now - lastBody.t < 250) people = lastBody.people;     // hold through a brief dropout
+  else bodySmooth = [];
+
+  if (bodyStyle === "neon") {
+    tctx.globalCompositeOperation = "destination-out"; tctx.fillStyle = "rgba(0,0,0,0.16)"; tctx.fillRect(0, 0, W, H);
+    tctx.globalCompositeOperation = "source-over";
+    people.forEach((P, i) => drawNeon(P, i));
+    octx.save(); octx.globalCompositeOperation = "lighter"; octx.drawImage(trail, 0, 0); octx.restore();
+  } else {
+    people.forEach((P) => BODY_DRAW[bodyStyle](P));
+  }
+  const big = $("big"); big.hidden = false;
+  const n = people.length, nm = BODY_NAMES[bodyStyle];
+  big.innerHTML = n ? `${n}<small>${n === 1 ? nm[0] : nm[1]}</small>` : "–<small>step into frame, head to feet</small>";
+}
+
+// ---------- loop ----------
+function loop() {
+  if (stream && video.readyState >= 2 && video.currentTime !== lastVideoTime && !document.hidden) {
+    lastVideoTime = video.currentTime; frameNo++;
+    const d = detectors[mode];
+    if (!d) octx.drawImage(video, 0, 0, out.width, out.height);
+    else {
+      const ts = Math.max(performance.now(), lastTs + 1); lastTs = ts;
+      try {
+        if (mode === "body") d.detectForVideo(video, ts, renderBody);   // masks are only valid inside this callback
+        else { const r = d.detectForVideo(video, ts); (mode === "fingers" ? renderFingers : renderFace)(r); }
+        window.__frames = (window.__frames || 0) + 1; errorCount = 0;
+      } catch (e) {
+        console.error(e);
+        if (++errorCount > 5 && !forceCPU.has(mode)) {   // e.g. the GPU context was lost: rebuild this model on the CPU
+          forceCPU.add(mode); delete detectors[mode]; delete loading[mode]; errorCount = 0;
+          setStatus("Graphics hiccup, switching this model to the CPU…"); getDetector(mode);
+        } else if (errorCount > 5) setStatus(`MediaPipe error: ${e.message || e}`, true);
+      }
+      const now = performance.now();
+      fps = fps * 0.9 + (1000 / Math.max(1, now - lastFrame)) * 0.1; lastFrame = now;
+      if (frameNo % 10 === 0) $("fps").textContent = `${fps.toFixed(0)} fps`;
+    }
+  }
+  requestAnimationFrame(loop);
+}
+
+// ---------- wiring ----------
+document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
+document.querySelectorAll("[data-face]").forEach((b) => b.addEventListener("click", () => setFaceStyle(b.dataset.face)));
+document.querySelectorAll("[data-body]").forEach((b) => b.addEventListener("click", () => setBodyStyle(b.dataset.body)));
+document.addEventListener("keydown", (e) => {
+  if (e.target.closest("input, textarea, select")) return;
+  const m = { "1": "fingers", "2": "face", "3": "body" }[e.key];
+  if (m) setMode(m);
+  if (e.key === "o" || e.key === "O") {
+    if (mode === "face") setFaceStyle(FACE_STYLES[(FACE_STYLES.indexOf(faceStyle) + 1) % FACE_STYLES.length]);
+    if (mode === "body") setBodyStyle(BODY_STYLES[(BODY_STYLES.indexOf(bodyStyle) + 1) % BODY_STYLES.length]);
+  }
+});
+window.addEventListener("hashchange", () => setMode(location.hash.slice(1), false));
+$("cam").addEventListener("click", startCamera);
+$("camSel").addEventListener("change", (e) => switchCamera(e.target.value, { ptz: load(PTZ_KEY) === "1" }));
+navigator.mediaDevices?.addEventListener?.("devicechange", () => { if (stream) listCameras(); });
+$("plate").addEventListener("click", capturePlate);
+$("zoom").addEventListener("input", (e) => setZoom(e.target.value));
+$("recenter").addEventListener("click", recenter);
+$("enablePtz").addEventListener("click", () => switchCamera(stream?.getVideoTracks()[0]?.getSettings().deviceId, { ptz: true }));
+$("mirror").addEventListener("change", (e) => $("stage").classList.toggle("mirror", e.target.checked));
+$("full").addEventListener("click", () => { $("stage").requestFullscreen?.().catch(() => setStatus("Fullscreen isn't available here.")); });
+$("snap").addEventListener("click", () => {
+  const c = document.createElement("canvas"); c.width = out.width; c.height = out.height;
+  const x = c.getContext("2d");
+  if ($("mirror").checked) { x.translate(c.width, 0); x.scale(-1, 1); }
+  x.drawImage(out, 0, 0);
+  c.toBlob((b) => {
+    const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = `${mode}.png`; a.click();
+    setStatus(`Snapshot saved as ${mode}.png.`);
+  });
+});
+
+setMode(location.hash.slice(1) || "fingers", false);
+try {
+  fileset = await FilesetResolver.forVisionTasks(WASM);
+  window.__mpReady = true;
+  await getDetector(mode);
+  preloadOthers();
+  requestAnimationFrame(loop);
+} catch (e) {
+  setStatus(`Couldn't start MediaPipe: ${e.message || e}`, true);
+}
+</script>
+</body>
+</html>
